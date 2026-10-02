@@ -293,6 +293,10 @@
 ; * Marketplace inventory-import compatibility service.
 ; * Firestorm uses the public MarketplaceURL for /api/1/{agent}/inventory/import/.
 [MarketplaceService]
+    ;; Marketplace persistence defaults to the main [DatabaseService] provider/connection.
+    ;; Set these explicitly only when Marketplace should use a separate database.
+    ; StorageProvider = "OpenSim.Data.MySQL.dll:MySQLMarketplaceData"
+    ; ConnectionString = "Data Source=localhost;Database=opensim;User ID=opensim;Password=*****;Old Guids=true;SslMode=None;"
     InventoryService = "OpenSim.Services.InventoryService.dll:XInventoryService"
 
 
