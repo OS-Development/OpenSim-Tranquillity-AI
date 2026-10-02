@@ -26,7 +26,7 @@ public sealed class MarketplaceInventoryImportHandler : SimpleStreamHandler
     private static readonly ConcurrentDictionary<string, UUID> Jobs = new();
 
     public MarketplaceInventoryImportHandler(IInventoryService inventory)
-        : base("/api/1")
+        : base("/api")
     {
         _inventory = inventory;
     }
