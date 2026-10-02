@@ -53,6 +53,12 @@ public sealed class FirestormListingRequest
 
 public sealed class FirestormListingData
 {
+    [JsonPropertyName("id")]
+    public int Id { get; init; }
+
+    [JsonPropertyName("is_listed")]
+    public bool IsListed { get; init; }
+
     [JsonPropertyName("name")]
     public string Name { get; init; } = string.Empty;
 
