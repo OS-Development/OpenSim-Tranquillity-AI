@@ -45,6 +45,21 @@ Buyer inventory / merchant settlement
 
 Marketplace-specific state must not be stored by modifying inventory item semantics. A listing references an inventory item and its delivery metadata; the normal inventory and asset services remain authoritative for inventory/assets.
 
+## Deployment topology
+
+The Marketplace is a **logical service boundary, not a separate Marketplace server process** in the current implementation.
+
+- **Robust/GridServer:** hosts the centralized Marketplace HTTP/API connector and inventory-import endpoints alongside the existing Grid/Inventory service connectors.
+- **RegionServer:** hosts the per-agent DirectDelivery capability module used by Firestorm for Marketplace listing management.
+- **Marketplace service library:** contains merchant/store/listing/order state and persistence logic and is reused by the hosting components rather than starting its own process.
+- **Database:** stores durable Marketplace state when a persistent provider is configured.
+- **MoneyServer:** remains the existing money ledger/service; Marketplace does not introduce a second currency database.
+- **Inventory service:** remains authoritative for resident inventory and is used for listing preparation and delivery.
+
+This means a normal deployment does **not** need an additional Marketplace executable. Multiple Robust/GridServer instances can share the Marketplace database when the storage allocator and transaction coordination are made cross-process safe. The current numeric Marketplace-ID allocator is deliberately documented as single-writer until that hardening is completed.
+
+A standalone Marketplace process can be introduced later if the deployment needs independent scaling, but it is not required by the current architecture.
+
 ## Core entities
 
 ### Merchant
