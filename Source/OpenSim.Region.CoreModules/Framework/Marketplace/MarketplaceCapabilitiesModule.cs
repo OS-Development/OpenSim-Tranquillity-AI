@@ -169,7 +169,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
 
         if (TryGetListingId(route, "/listing/", out var listingId))
         {
-            var listing = s_marketplace.GetListingByMarketplaceId(listingId);
+            var listing = _marketplace.GetListingByMarketplaceId(listingId);
             if (listing == null || listing.MerchantId != agentId)
             {
                 WriteError(response, HttpStatusCode.NotFound, "Marketplace listing was not found.");
@@ -199,8 +199,8 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
         var listing = payload?.Listing
             ?? throw new ArgumentException("The listing payload is required.");
 
-        var store = s_marketplace.GetOrCreateStore(agentId);
-        var created = s_marketplace.CreateListing(
+        var store = _marketplace.GetOrCreateStore(agentId);
+        var created = _marketplace.CreateListing(
             agentId,
             store.StoreId,
             listing.InventoryInfo.ListingFolderId,
@@ -237,7 +237,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
         var listing = payload?.Listing
             ?? throw new ArgumentException("The listing payload is required.");
 
-        var updated = s_marketplace.UpdateListing(
+        var updated = _marketplace.UpdateListing(
             listing.Id > 0 ? listing.Id : listingId,
             agentId,
             listing.InventoryInfo.ListingFolderId,
@@ -256,7 +256,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
             return;
         }
 
-        if (!s_marketplace.DeleteListing(listingId, agentId))
+        if (!_marketplace.DeleteListing(listingId, agentId))
         {
             WriteError(response, HttpStatusCode.NotFound, "Marketplace listing was not found.");
             return;
