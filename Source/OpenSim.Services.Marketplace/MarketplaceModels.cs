@@ -39,8 +39,11 @@ public sealed record MarketplaceStore(
 
 public sealed record MarketplaceListing(
     UUID ListingId,
+    int MarketplaceId,
     UUID MerchantId,
     UUID StoreId,
+    UUID ListingFolderId,
+    UUID VersionFolderId,
     UUID InventoryItemId,
     UUID AssetId,
     string Name,
