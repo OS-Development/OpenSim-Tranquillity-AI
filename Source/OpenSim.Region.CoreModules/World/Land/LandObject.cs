@@ -688,7 +688,7 @@ public class LandObject : ILandObject
         newData.OwnerID = avatarID;
         newData.GroupID = groupID;
         newData.IsGroupOwned = groupOwned;
-        //newData.auctionID = AuctionID;
+        newData.AuctionID = AuctionID;
         newData.ClaimDate = Util.UnixTimeSinceEpoch();
         newData.ClaimPrice = claimprice;
         newData.SalePrice = 0;

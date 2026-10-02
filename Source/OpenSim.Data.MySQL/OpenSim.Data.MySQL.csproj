@@ -17,6 +17,7 @@
     <EmbeddedResource Include="Resources/AgentPrefs.migrations" />
     <EmbeddedResource Include="Resources/AssetStore.migrations" />
     <EmbeddedResource Include="Resources/AuthStore.migrations" />
+	<EmbeddedResource Include="Resources/AuctionStore.migrations" />
     <EmbeddedResource Include="Resources/Avatar.migrations" />
     <EmbeddedResource Include="Resources/EstateStore.migrations" />
     <EmbeddedResource Include="Resources/FriendsStore.migrations" />

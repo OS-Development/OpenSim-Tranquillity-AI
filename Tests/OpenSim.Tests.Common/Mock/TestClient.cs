@@ -82,6 +82,7 @@ public class TestClient : IClientAPI, IClientCore
 
     public event MoneyTransferRequest OnMoneyTransferRequest;
     public event ParcelBuy OnParcelBuy;
+    public event AuctionStart OnViewerStartAuction;
     public event Action<IClientAPI> OnConnectionClosed;
     public event MoveItemsAndLeaveCopy OnMoveItemsAndLeaveCopy;
     public event ImprovedInstantMessage OnInstantMessage;

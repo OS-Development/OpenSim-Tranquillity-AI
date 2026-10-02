@@ -143,6 +143,8 @@
     ; EstateDataService = "${Const|PrivatePort}/OpenSim.Server.Handlers.dll:EstateDataRobustConnector"
 
     MuteListConnector = "${Const|PrivatePort}/OpenSim.Server.Handlers.dll:MuteListServiceConnector"
+	
+	AuctionServiceConnector = "${Const|PrivatePort}/OpenSim.Server.Handlers.dll:OpenSim.Server.Handlers.Auction.AuctionServiceInConnector"
 
     ;; Additions for Hypergrid
 
@@ -957,3 +959,9 @@
     ;; ConnectionString = "Data Source=localhost;Database=robust;User ID=robust;Password=*****;Old Guids=true;CharSet=utf8mb4;"
 
     UserAccountService = "OpenSim.Services.UserAccountService.dll:UserAccountService"
+
+[AuctionService]
+    LocalServiceModule   = "OpenSim.Services.AuctionService.dll:OpenSim.Services.AuctionService.AuctionService"
+    ConnectionString     = "Data Source=localhost;Database=opensim;User ID=robust;Password=*****;Old Guids=true;CharSet=utf8mb4;"SWORD;"
+    AuctionServicesAccountID = "10000000-0000-0000-0000-000000000001"
+    DefaultCommissionPct = 15

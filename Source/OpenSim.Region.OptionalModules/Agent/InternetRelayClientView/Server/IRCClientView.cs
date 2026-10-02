@@ -799,6 +799,7 @@ public class IRCClientView : IClientAPI, IClientCore
     public event MoneyBalanceRequest OnMoneyBalanceRequest;
     public event UpdateAvatarProperties OnUpdateAvatarProperties;
     public event ParcelBuy OnParcelBuy;
+    public event AuctionStart OnViewerStartAuction;
     public event RequestPayPrice OnRequestPayPrice;
     public event ObjectSaleInfo OnObjectSaleInfo;
     public event ObjectBuy OnObjectBuy;

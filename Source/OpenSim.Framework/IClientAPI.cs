@@ -513,6 +513,8 @@ public delegate void SimWideDeletesDelegate(IClientAPI client,UUID agentID, int 
 public delegate void SendPostcard(IClientAPI client);
 public delegate void ChangeInventoryItemFlags(IClientAPI client, UUID itemID, uint flags);
 
+public delegate void AuctionStart(UUID agentID, int parcelLocalID, UUID snapshotID);
+
 #endregion
 
 public struct DirPlacesReplyData
@@ -1020,6 +1022,8 @@ public interface IClientAPI
     event MuteListEntryRemove OnRemoveMuteListEntry;
     event GodlikeMessage onGodlikeMessage;
     event GodUpdateRegionInfoUpdate OnGodUpdateRegionInfoUpdate;
+    event AuctionStart OnViewerStartAuction;
+    
     event GenericCall2 OnUpdateThrottles;
     /// <summary>
     /// Set the debug level at which packet output should be printed to console.

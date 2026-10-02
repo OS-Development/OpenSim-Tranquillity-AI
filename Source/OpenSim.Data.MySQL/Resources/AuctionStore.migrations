@@ -1,0 +1,52 @@
+:VERSION 1      #----- Initial auction tables
+
+BEGIN;
+
+CREATE TABLE IF NOT EXISTS `auctions` (
+    `AuctionID`      INT UNSIGNED    NOT NULL AUTO_INCREMENT,
+    `ParcelID`       CHAR(36)        NOT NULL COMMENT 'LandData.GlobalID',
+    `ParcelLocalID`  INT             NOT NULL COMMENT 'LandData.LocalID (region-scoped)',
+    `ParcelName`     VARCHAR(255)    NOT NULL DEFAULT '',
+    `ParcelArea`     INT             NOT NULL DEFAULT 0,
+    `RegionID`       CHAR(36)        NOT NULL,
+    `OriginalOwner`  CHAR(36)        NOT NULL,
+    `EscrowAccount`  CHAR(36)        NOT NULL,
+    `StartTime`      DATETIME        NOT NULL,
+    `CloseTime`      DATETIME        NOT NULL,
+    `StartingBid`    INT             NOT NULL DEFAULT 0,
+    `BidIncrement`   INT             NOT NULL DEFAULT 10,
+    `CurrentBid`     INT             NOT NULL DEFAULT 0,
+    `HighBidderID`   CHAR(36)        NOT NULL DEFAULT '00000000-0000-0000-0000-000000000000',
+    `EscrowAmount`   INT             NOT NULL DEFAULT 0,
+    `CommissionPct`  TINYINT         NOT NULL DEFAULT 15,
+    `Status`         TINYINT         NOT NULL DEFAULT 0
+                         COMMENT '0=Scheduled 1=Open 2=Closed 3=Settled 4=Cancelled',
+    `CreatedAt`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    `UpdatedAt`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP
+                         ON UPDATE CURRENT_TIMESTAMP,
+    PRIMARY KEY (`AuctionID`),
+    UNIQUE KEY `uq_parcel_active` (`ParcelID`, `Status`),
+    KEY `idx_region_status`  (`RegionID`, `Status`),
+    KEY `idx_status_start`   (`Status`, `StartTime`),
+    KEY `idx_status_close`   (`Status`, `CloseTime`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+COMMIT;
+
+:VERSION 2         # -------------------------- drop bad unique key, index ParcelID
+
+BEGIN;
+
+ALTER TABLE `auctions` DROP INDEX `uq_parcel_active`;
+ALTER TABLE `auctions` ADD KEY `idx_parcel` (`ParcelID`);
+
+COMMIT;
+
+:VERSION 3         # -------------------------- settlement progress
+
+BEGIN;
+
+ALTER TABLE `auctions` ADD COLUMN `SettlementState` TINYINT NOT NULL DEFAULT 0
+    COMMENT '0=None 1=LandTransferred 2=OwnerPaid';
+
+COMMIT;

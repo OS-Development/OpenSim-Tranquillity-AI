@@ -248,3 +248,9 @@
     ; Change this to your grid-wide experience server
     ;
     ExperienceServerURI = "${Const|BaseURL}:${Const|PrivatePort}"
+
+[AuctionService]
+    Enabled          = true
+    AuctionServerURI = "${Const|PrivURL}:${Const|PrivatePort}"
+    TimerIntervalSeconds = 60
+    DefaultCommissionPct = 15

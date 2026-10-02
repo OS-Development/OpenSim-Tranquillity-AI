@@ -188,6 +188,7 @@ public class LLClientView : IClientAPI, IClientCore, IClientIM, IClientChat, ICl
     public event EconomyDataRequest OnEconomyDataRequest;
     public event MoneyBalanceRequest OnMoneyBalanceRequest;
     public event ParcelBuy OnParcelBuy;
+    public event AuctionStart OnViewerStartAuction; // agentID, parcelLocalID, snapshotID
     public event UUIDNameRequest OnTeleportHomeRequest;
     public event UUIDNameRequest OnUUIDGroupNameRequest;
     public event ScriptAnswer OnScriptAnswer;
@@ -8409,6 +8410,7 @@ public class LLClientView : IClientAPI, IClientCore, IClientIM, IClientChat, ICl
         { PacketType.MultipleObjectUpdate, new(HandleMultipleObjUpdate, false) },
         { PacketType.MoneyTransferRequest, new(HandleMoneyTransferRequest, false) },
         { PacketType.ParcelBuy, new(HandleParcelBuyRequest, false) },
+        { PacketType.ViewerStartAuction, new(HandleViewerStartAuction, false) },
         { PacketType.RegionHandshakeReply, new(HandlerRegionHandshakeReply, false) },
         { PacketType.SetAlwaysRun, new(HandleSetAlwaysRun, false) },
         { PacketType.AgentAnimation, new(HandleAgentAnimation, false) },
@@ -8872,6 +8874,15 @@ public class LLClientView : IClientAPI, IClientCore, IClientIM, IClientChat, ICl
                                 parcel.Data.RemoveContribution, parcel.Data.LocalID, parcel.ParcelData.Area,
                                 parcel.ParcelData.Price,
                                 false);
+    }
+
+    private static void HandleViewerStartAuction(LLClientView c, Packet Pack)
+    {
+        ViewerStartAuctionPacket pkt = (ViewerStartAuctionPacket)Pack;
+        c.OnViewerStartAuction?.Invoke(
+            c.m_agentId,
+            pkt.ParcelData.LocalID,
+            pkt.ParcelData.SnapshotID);
     }
 
     private static void HandleUUIDGroupNameRequest(LLClientView c, Packet Pack)

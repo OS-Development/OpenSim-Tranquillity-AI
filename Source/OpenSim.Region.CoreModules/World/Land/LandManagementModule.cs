@@ -1226,6 +1226,9 @@ public class LandManagementModule : INonSharedRegionModule , ILandChannel
         if (!m_scene.Permissions.CanEditParcelProperties(attempting_user_id, startLandObject, GroupPowers.LandDivideJoin, true))
             return;
 
+        if (IsUnderAuction(startLandObject, attempting_user_id))
+            return;
+
         //Loop through the points
         int area = 0;
         try
@@ -1341,6 +1344,12 @@ public class LandManagementModule : INonSharedRegionModule , ILandChannel
         if(maxindex < 0 || selectedLandObjects.Count < 2)
             return;
 
+        foreach (ILandObject p in selectedLandObjects)
+        {
+            if (IsUnderAuction(p, attempting_user_id))
+                return;
+        }
+
         ILandObject masterLandObject = selectedLandObjects[maxindex];
         selectedLandObjects.RemoveAt(maxindex);
 
@@ -1448,10 +1457,13 @@ public class LandManagementModule : INonSharedRegionModule , ILandChannel
                     //Public type
                     curByte = LandChannel.LAND_TYPE_PUBLIC; // this does nothing, its zero
                 }
-                // LAND_TYPE_IS_BEING_AUCTIONED still unsuported
+                else if (currentParcelLandData.AuctionID != 0)
+                {
+                    curByte = LandChannel.LAND_TYPE_IS_BEING_AUCTIONED;
+                }
                 else
                 {
-                    //Other 
+                    //Other
                     curByte = LandChannel.LAND_TYPE_OWNED_BY_OTHER;
                 }
 
@@ -1682,6 +1694,9 @@ public class LandManagementModule : INonSharedRegionModule , ILandChannel
                 return;
         }
 
+                if (IsUnderAuction(land, remote_client.AgentId))
+                    return;
+
                 land.LandData.OwnerID = ownerID;
                 land.LandData.GroupID = UUID.Zero;
                 land.LandData.IsGroupOwned = false;
@@ -1691,6 +1706,23 @@ public class LandManagementModule : INonSharedRegionModule , ILandChannel
                 land.SendLandUpdateToClient(true, remote_client);
             }
 
+    // A parcel under auction is held by the auction escrow account.  Changing its
+    // owner or its shape behind the auction's back (abandon, reclaim, god force
+    // owner, subdivide, join) would strand the bids, so those are refused until
+    // the auction has ended or been cancelled.  (WhiteCore resets AuctionID in the
+    // same four ownership paths; resetting it here would orphan the auction record
+    // and the bidders' escrowed money, so we refuse instead.)
+    private bool IsUnderAuction(ILandObject land, UUID agentID)
+    {
+        if (land is null || land.LandData.AuctionID == 0)
+            return false;
+
+        m_Dialog?.SendAlertToUser(agentID,
+            $"This parcel is being auctioned (auction {land.LandData.AuctionID}). " +
+            "It cannot be changed until the auction has ended or been cancelled.");
+        return true;
+    }
+
     public void ClientOnParcelAbandonRequest(int local_id, IClientAPI remote_client)
     {
         ILandObject land;
@@ -1699,6 +1731,9 @@ public class LandManagementModule : INonSharedRegionModule , ILandChannel
             if (!m_landList.TryGetValue(local_id, out land) || land is null)
                 return;
         }
+
+            if (IsUnderAuction(land, remote_client.AgentId))
+                return;
 
             if (m_scene.Permissions.CanAbandonParcel(remote_client.AgentId, land))
             {
@@ -1721,6 +1756,9 @@ public class LandManagementModule : INonSharedRegionModule , ILandChannel
             if (!m_landList.TryGetValue(local_id, out land) || land is null)
                 return;
         }
+
+            if (IsUnderAuction(land, remote_client.AgentId))
+                return;
 
             if (m_scene.Permissions.CanReclaimParcel(remote_client.AgentId, land))
             {

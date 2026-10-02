@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 16
-VisualStudioVersion = 16.0.31229.75
+# Visual Studio Version 17
+VisualStudioVersion = 17.14.37628.2 d17.14
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OpenSim.Server.RegionServer", "Source\OpenSim.Server.RegionServer\OpenSim.Server.RegionServer.csproj", "{AC9EB8AB-0000-0000-0000-000000000000}"
 EndProject
@@ -184,6 +184,8 @@ EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenSim.Region.OptionalModules.ServerSideBaking.Tests", "Tests\OpenSim.Region.OptionalModules.ServerSideBaking.Tests\OpenSim.Region.OptionalModules.ServerSideBaking.Tests.csproj", "{7A38CB4E-9986-4817-851C-F25D6EA74CD3}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "OpenSim.Region.ClientStack.LindenCaps.Tests", "Tests\OpenSim.Region.ClientStack.LindenCaps.Tests\OpenSim.Region.ClientStack.LindenCaps.Tests.csproj", "{D294F8E7-1D95-4AB4-BDEE-FCF3190A54CA}"
+EndProject
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "OpenSim.Services.AuctionService", "Source\OpenSim.Services.AuctionService\OpenSim.Services.AuctionService.csproj", "{A18D326A-9509-D59E-E4C9-33AB35874EEA}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -1251,6 +1253,18 @@ Global
 		{D294F8E7-1D95-4AB4-BDEE-FCF3190A54CA}.Release|x64.Build.0 = Release|Any CPU
 		{D294F8E7-1D95-4AB4-BDEE-FCF3190A54CA}.Release|x86.ActiveCfg = Release|Any CPU
 		{D294F8E7-1D95-4AB4-BDEE-FCF3190A54CA}.Release|x86.Build.0 = Release|Any CPU
+		{A18D326A-9509-D59E-E4C9-33AB35874EEA}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A18D326A-9509-D59E-E4C9-33AB35874EEA}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A18D326A-9509-D59E-E4C9-33AB35874EEA}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{A18D326A-9509-D59E-E4C9-33AB35874EEA}.Debug|x64.Build.0 = Debug|Any CPU
+		{A18D326A-9509-D59E-E4C9-33AB35874EEA}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{A18D326A-9509-D59E-E4C9-33AB35874EEA}.Debug|x86.Build.0 = Debug|Any CPU
+		{A18D326A-9509-D59E-E4C9-33AB35874EEA}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A18D326A-9509-D59E-E4C9-33AB35874EEA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A18D326A-9509-D59E-E4C9-33AB35874EEA}.Release|x64.ActiveCfg = Release|Any CPU
+		{A18D326A-9509-D59E-E4C9-33AB35874EEA}.Release|x64.Build.0 = Release|Any CPU
+		{A18D326A-9509-D59E-E4C9-33AB35874EEA}.Release|x86.ActiveCfg = Release|Any CPU
+		{A18D326A-9509-D59E-E4C9-33AB35874EEA}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
@@ -1344,6 +1358,7 @@ Global
 		{55932F56-34A3-424D-B9E3-AC204231776F} = {7F5EC7C6-FD99-4084-8530-5D3F28D6D7C0}
 		{7A38CB4E-9986-4817-851C-F25D6EA74CD3} = {7F5EC7C6-FD99-4084-8530-5D3F28D6D7C0}
 		{D294F8E7-1D95-4AB4-BDEE-FCF3190A54CA} = {7F5EC7C6-FD99-4084-8530-5D3F28D6D7C0}
+		{A18D326A-9509-D59E-E4C9-33AB35874EEA} = {E886CEB5-B01D-411F-A7A0-72AA1B71761D}
 	EndGlobalSection
 	GlobalSection(ExtensibilityGlobals) = postSolution
 		SolutionGuid = {A40AD54B-8BC7-41E4-B241-19B59EA65D2A}

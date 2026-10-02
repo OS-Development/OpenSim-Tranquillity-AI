@@ -288,6 +288,7 @@ public class NPCAvatar : IClientAPI, INPC
     public event MoveItemsAndLeaveCopy OnMoveItemsAndLeaveCopy;
     public event MoneyTransferRequest OnMoneyTransferRequest;
     public event ParcelBuy OnParcelBuy;
+    public event AuctionStart OnViewerStartAuction;
     public event Action<IClientAPI> OnConnectionClosed;
     public event GenericMessage OnGenericMessage;
     public event ImprovedInstantMessage OnInstantMessage;
