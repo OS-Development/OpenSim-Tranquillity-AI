@@ -89,7 +89,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
         caps.RegisterSimpleHandler("DirectDelivery", handler, true, true);
     }
 
-    private static void HandleMarketplaceRequest(
+    private void HandleMarketplaceRequest(
         UUID agentId,
         IOSHttpRequest request,
         IOSHttpResponse response)
@@ -152,7 +152,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
         }
     }
 
-    private static void HandleGet(UUID agentId, string route, IOSHttpResponse response)
+    private void HandleGet(UUID agentId, string route, IOSHttpResponse response)
     {
         if (route.Equals("/merchant", StringComparison.OrdinalIgnoreCase))
         {
@@ -163,7 +163,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
 
         if (route.Equals("/listings", StringComparison.OrdinalIgnoreCase))
         {
-            WriteListings(response, s_marketplace.GetListings(agentId));
+            WriteListings(response, _marketplace.GetListings(agentId));
             return;
         }
 
@@ -183,7 +183,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
         WriteError(response, HttpStatusCode.NotFound, "Marketplace route was not found.");
     }
 
-    private static void HandlePost(
+    private void HandlePost(
         UUID agentId,
         string route,
         IOSHttpRequest request,
@@ -220,7 +220,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
         response.StatusCode = (int)HttpStatusCode.Created;
     }
 
-    private static void HandlePut(
+    private void HandlePut(
         UUID agentId,
         string route,
         IOSHttpRequest request,
@@ -248,7 +248,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
         WriteListings(response, new[] { updated });
     }
 
-    private static void HandleDelete(UUID agentId, string route, IOSHttpResponse response)
+    private void HandleDelete(UUID agentId, string route, IOSHttpResponse response)
     {
         if (!TryGetListingId(route, "/listing/", out var listingId))
         {
@@ -265,7 +265,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
         WriteJson(response, new { listings = Array.Empty<object>() });
     }
 
-    private static void WriteListings(
+    private void WriteListings(
         IOSHttpResponse response,
         IEnumerable<MarketplaceListing> listings)
     {
