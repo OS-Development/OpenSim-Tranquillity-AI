@@ -268,3 +268,16 @@ The viewer expects JSON for the SLM listing API and HTTP status handling includi
 The initial Marketplace service classes in this branch are only a domain/service foundation. They are **not yet Firestorm-compatible**. In particular, they currently expose a custom C# service interface instead of the capability routes above, use in-memory state, and do not yet implement the listing-folder/version-folder model or the Marketplace inventory-import session.
 
 The next implementation step should therefore be to add the simulator capability endpoint and make its JSON contract match Firestorm before building the web storefront. The existing-money purchase path remains a separate checkout concern.
+
+
+## Persistent storage
+
+Marketplace state can now be stored through `IMarketplaceDataPlugin`. The region Marketplace module reads the `[Marketplace]` section and supports:
+
+- `OpenSim.Data.MySQL.dll:MySQLMarketplaceData`
+- `OpenSim.Data.PGSQL.dll:PGSQLMarketplaceData`
+- `OpenSim.Data.SQLite.dll:SQLiteMarketplaceData`
+
+The provider creates the Marketplace schema automatically on initialization. Merchant, store, listing, and order/idempotency state are persisted. Leaving `StorageProvider` empty retains the in-memory mode for development/testing.
+
+The current provider-neutral numeric Marketplace ID allocator uses the existing-process serialization lock and `MAX(marketplace_id)+1`. This is safe for a single Marketplace service process, but a future horizontally scaled Marketplace service should replace it with a database-native sequence/identity allocator before multiple Marketplace writers share the same database.
