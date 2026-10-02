@@ -4,6 +4,7 @@ using System.Text.Json;
 using OpenMetaverse;
 using OpenSim.Framework;
 using OpenSim.Framework.Capabilities;
+using OpenSimCaps = OpenSim.Framework.Capabilities.Caps;
 using OpenSim.Framework.Servers.HttpServer;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
@@ -79,7 +80,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
     {
     }
 
-    private void OnRegisterCaps(UUID agentId, Caps caps)
+    private void OnRegisterCaps(UUID agentId, OpenSimCaps caps)
     {
         var path = caps.CapsObjectPath + "/DirectDelivery";
         var handler = new SimpleStreamHandler(path, (request, response) =>
