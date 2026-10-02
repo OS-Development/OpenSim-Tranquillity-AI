@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>OpenSim Marketplace</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header class="site-header">
+    <div class="brand">OpenSim Marketplace</div>
+    <form class="search"><input name="q" placeholder="Search the Marketplace"><button>Search</button></form>
+    <nav><a href="#">Sign in</a><a href="#">My Marketplace</a></nav>
+  </header>
+  <main class="layout">
+    <aside class="sidebar">
+      <h2>Categories</h2>
+      <ul id="categories"></ul>
+    </aside>
+    <section class="content">
+      <div class="hero">
+        <p class="eyebrow">OPEN SIMULATOR MARKETPLACE</p>
+        <h1>Discover virtual-world products</h1>
+        <p>Browse items from independent merchants and find content for your avatar, home, region and virtual life.</p>
+      </div>
+      <div class="toolbar"><h2>Featured listings</h2><select><option>Newest</option><option>Price: Low to High</option><option>Price: High to Low</option></select></div>
+      <div id="listings" class="listings">
+        <article class="empty"><h3>No listings yet</h3><p>Marketplace listings will appear here when merchants publish products.</p></article>
+      </div>
+    </section>
+  </main>
+  <footer>OpenSimulator Marketplace</footer>
+  <script>
+    const categories = [
+      [139,"Animals"],[853,"Animated Objects"],[24,"Animations"],[3,"Apparel"],[29,"Art"],
+      [190,"Audio and Video"],[5,"Avatar Accessories"],[332,"Avatar Appearance"],[371,"Avatar Components"],
+      [462,"Breedables"],[8,"Building and Object Components"],[34,"Buildings and Other Structures"],
+      [9,"Business"],[83,"Celebrations"],[4,"Complete Avatars"],[854,"Furry"],[867,"Gachas"],
+      [231,"Gadgets"],[6,"Home and Garden"],[32,"Miscellaneous"],[852,"Real Estate"],
+      [7,"Recreation and Entertainment"],[33,"Scripts"],[199,"Services"],[238,"Used Items"],
+      [20,"Vehicles"],[21,"Weapons"],[2,"Everything Else"]
+    ];
+    document.getElementById("categories").innerHTML =
+      categories.map(([id,name]) => '<li><a href="?category_id='+id+'">'+name+'</a></li>').join("");
+  </script>
+</body>
+</html>
