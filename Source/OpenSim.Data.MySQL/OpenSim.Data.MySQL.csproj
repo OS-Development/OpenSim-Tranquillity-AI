@@ -11,6 +11,7 @@
     <ProjectReference Include="../../Source/OpenSim.Framework/OpenSim.Framework.csproj" />
     <ProjectReference Include="../../Source/OpenSim.Framework.Console/OpenSim.Framework.Console.csproj" />
     <ProjectReference Include="../../Source/OpenSim.Region.Framework/OpenSim.Region.Framework.csproj" />
+    <ProjectReference Include="../../Source/OpenSim.Services.Marketplace/OpenSim.Services.Marketplace.csproj" />
   </ItemGroup>
 
   <ItemGroup>
