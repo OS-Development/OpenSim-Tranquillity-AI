@@ -152,14 +152,14 @@ public sealed class MarketplaceInventoryImportHandler : SimpleStreamHandler
     private static byte[] SerializeEmptyMap()
     {
         return Encoding.UTF8.GetBytes(
-            "<?xml version="1.0" encoding="UTF-8"?><llsd><map /></llsd>");
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?><llsd><map /></llsd>");
     }
 
     private static byte[] SerializeString(string value)
     {
         string escaped = System.Security.SecurityElement.Escape(value) ?? string.Empty;
         return Encoding.UTF8.GetBytes(
-            "<?xml version="1.0" encoding="UTF-8"?><llsd><string>" +
+            "<?xml version=\"1.0\" encoding=\"UTF-8\"?><llsd><string>" +
             escaped +
             "</string></llsd>");
     }
