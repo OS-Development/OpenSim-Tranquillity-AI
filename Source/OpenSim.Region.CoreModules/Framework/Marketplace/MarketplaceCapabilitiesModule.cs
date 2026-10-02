@@ -1,6 +1,8 @@
 using System.Net;
 using System.Text;
 using System.Text.Json;
+using System.Reflection;
+using Microsoft.Extensions.Logging;
 using OpenMetaverse;
 using OpenSim.Framework;
 using OpenSim.Framework.Capabilities;
@@ -20,6 +22,7 @@ namespace OpenSim.Region.CoreModules.Framework.Marketplace;
 /// </summary>
 public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
 {
+    private static readonly ILogger m_log = LoggerProvider.CreateLogger(MethodBase.GetCurrentMethod().DeclaringType);
     private IMarketplaceService _marketplace = new MarketplaceService();
     private IMarketplaceDataPlugin? _data;
 
@@ -59,6 +62,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
         _scene = scene;
         _inventory = scene.RequestModuleInterface<IInventoryService>();
         scene.EventManager.OnRegisterCaps += OnRegisterCaps;
+        m_log.LogInformation("[MARKETPLACE]: DirectDelivery capability module attached to region {0}", scene.RegionInfo.RegionName);
     }
 
     public void RegionLoaded(Scene scene)
@@ -87,6 +91,11 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
             HandleMarketplaceRequest(agentId, request, response));
 
         caps.RegisterSimpleHandler("DirectDelivery", handler, true, true);
+
+        m_log.LogDebug(
+            "[MARKETPLACE]: Registered DirectDelivery for agent {0}: {1}",
+            agentId,
+            path);
     }
 
     private void HandleMarketplaceRequest(
@@ -157,6 +166,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
         if (route.Equals("/merchant", StringComparison.OrdinalIgnoreCase))
         {
             _marketplace.GetOrCreateMerchant(agentId);
+            m_log.LogDebug("[MARKETPLACE]: /merchant requested for agent {0}", agentId);
             WriteJson(response, new { merchant = true });
             return;
         }
