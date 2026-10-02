@@ -9,6 +9,7 @@ using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 using OpenSim.Services.Marketplace;
 using OpenSim.Services.Interfaces;
+using OpenSim.Server.Base;
 
 namespace OpenSim.Region.CoreModules.Framework.Marketplace;
 
@@ -18,7 +19,8 @@ namespace OpenSim.Region.CoreModules.Framework.Marketplace;
 /// </summary>
 public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
 {
-    private static readonly IMarketplaceService s_marketplace = new MarketplaceService();
+    private IMarketplaceService _marketplace = new MarketplaceService();
+    private IMarketplaceDataPlugin? _data;
 
     private Scene? _scene;
     private IInventoryService? _inventory;
@@ -28,6 +30,27 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
 
     public void Initialise(Nini.Config.IConfigSource source)
     {
+        var config = source.Configs["Marketplace"];
+        if (config == null)
+            return;
+
+        string provider = config.GetString("StorageProvider", string.Empty);
+        if (string.IsNullOrWhiteSpace(provider))
+            return;
+
+        string connectionString = config.GetString("ConnectionString", string.Empty);
+        if (string.IsNullOrWhiteSpace(connectionString))
+            throw new InvalidOperationException("Marketplace StorageProvider is configured but ConnectionString is empty.");
+
+        _data = ServerUtils.LoadPlugin<IMarketplaceDataPlugin>(
+            provider,
+            Array.Empty<object>());
+
+        if (_data == null)
+            throw new InvalidOperationException($"Unable to load Marketplace storage provider '{provider}'.");
+
+        _data.Initialise(connectionString);
+        _marketplace = new MarketplaceService(_data);
     }
 
     public void AddRegion(Scene scene)
@@ -132,7 +155,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
     {
         if (route.Equals("/merchant", StringComparison.OrdinalIgnoreCase))
         {
-            s_marketplace.GetOrCreateMerchant(agentId);
+            _marketplace.GetOrCreateMerchant(agentId);
             WriteJson(response, new { merchant = true });
             return;
         }
