@@ -214,7 +214,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
             ?? throw new ArgumentException("The listing payload is required.");
 
         var updated = s_marketplace.UpdateListing(
-            listingId,
+            listing.Id > 0 ? listing.Id : listingId,
             agentId,
             listing.InventoryInfo.ListingFolderId,
             listing.InventoryInfo.VersionFolderId,
