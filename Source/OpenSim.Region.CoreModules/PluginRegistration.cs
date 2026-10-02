@@ -65,6 +65,7 @@ public class PluginRegistration : IPluginRegistryProvider
         RegisterByName(registry, "/OpenSim/RegionModules", "BasicProfileModule", "OpenSim.Region.CoreModules.Avatar.Profile.BasicProfileModule", "BasicProfileModule");
         RegisterByName(registry, "/OpenSim/RegionModules", "UserProfilesModule", "OpenSim.Region.CoreModules.Avatar.UserProfiles.UserProfileModule", "UserProfilesModule");
         RegisterByName(registry, "/OpenSim/RegionModules", "CapabilitiesModule", "OpenSim.Region.CoreModules.Framework.CapabilitiesModule", "CapabilitiesModule");
+        RegisterByName(registry, "/OpenSim/RegionModules", "MarketplaceCapabilitiesModule", "OpenSim.Region.CoreModules.Framework.Marketplace.MarketplaceCapabilitiesModule", "MarketplaceCapabilitiesModule");
         RegisterByName(registry, "/OpenSim/RegionModules", "DAExampleModule", "OpenSim.Region.CoreModules.Framework.DynamicAttributes.DAExampleModule", "DAExampleModule");
         RegisterByName(registry, "/OpenSim/RegionModules", "DOExampleModule", "OpenSim.Region.CoreModules.Framework.DynamicAttributes.DOExampleModule", "DOExampleModule");
         RegisterByName(registry, "/OpenSim/RegionModules", "EntityTransferModule", "OpenSim.Region.CoreModules.Framework.EntityTransfer.EntityTransferModule", "EntityTransferModule");
