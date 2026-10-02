@@ -1342,3 +1342,13 @@
     ; Include-Architecture = "config-include/StandaloneHypergrid.ini"
     ; Include-Architecture = "config-include/Grid.ini"
     ; Include-Architecture = "config-include/GridHypergrid.ini"
+
+
+[Marketplace]
+;; Persistent Marketplace storage. Supported providers:
+;; OpenSim.Data.MySQL.dll:MySQLMarketplaceData
+;; OpenSim.Data.PGSQL.dll:PGSQLMarketplaceData
+;; OpenSim.Data.SQLite.dll:SQLiteMarketplaceData
+;; Leave StorageProvider empty for in-memory development mode.
+StorageProvider = ""
+ConnectionString = ""
