@@ -231,3 +231,40 @@ All Marketplace work is isolated on:
 `feature/marketplace`
 
 The `develop` branch is not used for Marketplace implementation commits.
+
+## Firestorm/SL Marketplace protocol compatibility
+
+Firestorm's Marketplace implementation in `llmarketplacefunctions.cpp` expects the simulator-provided Marketplace capability and derives API calls from it. The relevant viewer calls are:
+
+- `GET /merchant` — merchant/store status.
+- `GET /listings` — retrieve the resident's Marketplace listing records.
+- `GET /listing/{listing_id}` — retrieve one listing.
+- `POST /listings` — create a listing.
+- `PUT /listing/{listing_id}` — update listing state, version folder, and count-on-hand.
+- `PUT /associate_inventory/{listing_id}` — associate Marketplace inventory with an existing listing.
+- `DELETE /listing/{listing_id}` — remove/archive a listing.
+
+The listing JSON used by Firestorm includes:
+
+- `id`
+- `is_listed`
+- `edit_url`
+- `inventory_info.listing_folder_id`
+- `inventory_info.version_folder_id`
+- `inventory_info.count_on_hand`
+
+Listing creation sends a `listing` object containing `name` and `inventory_info`; update/association requests send the listing ID plus inventory information.
+
+Firestorm also has a separate inventory-import protocol:
+
+- `GET /api/1/{agent_uuid}/inventory/import/` establishes the Marketplace session/import endpoint.
+- `POST /api/1/{agent_uuid}/inventory/import/` triggers an inventory import job.
+- `GET /api/1/{agent_uuid}/inventory/import/{job_id}` polls that job.
+
+The viewer expects JSON for the SLM listing API and HTTP status handling including 200/201/202/302/400/401/403/404/409/410/499/500/503 for the Marketplace/import workflows.
+
+### Compatibility consequence
+
+The initial Marketplace service classes in this branch are only a domain/service foundation. They are **not yet Firestorm-compatible**. In particular, they currently expose a custom C# service interface instead of the capability routes above, use in-memory state, and do not yet implement the listing-folder/version-folder model or the Marketplace inventory-import session.
+
+The next implementation step should therefore be to add the simulator capability endpoint and make its JSON contract match Firestorm before building the web storefront. The existing-money purchase path remains a separate checkout concern.
