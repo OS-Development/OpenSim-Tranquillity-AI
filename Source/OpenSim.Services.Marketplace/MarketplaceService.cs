@@ -3,140 +3,114 @@ using OpenMetaverse;
 namespace OpenSim.Services.Marketplace;
 
 /// <summary>
-/// Initial Marketplace service boundary. Persistence, money and inventory adapters are
-/// deliberately supplied behind interfaces in later implementation phases.
+/// Marketplace domain service. When an IMarketplaceDataPlugin is supplied, all
+/// merchant/store/listing/order state is durable; otherwise the service retains
+/// the in-memory fallback used by lightweight standalone deployments/tests.
 /// </summary>
 public sealed class MarketplaceService : IMarketplaceService
 {
     private readonly object _sync = new();
+    private readonly IMarketplaceDataPlugin? _data;
     private readonly Dictionary<UUID, MarketplaceMerchant> _merchants = new();
     private readonly Dictionary<UUID, MarketplaceStore> _stores = new();
     private readonly Dictionary<UUID, MarketplaceListing> _listings = new();
     private readonly Dictionary<int, UUID> _marketplaceIds = new();
     private int _nextMarketplaceId = 1;
 
-    public MarketplaceMerchant? GetMerchant(UUID merchantId) =>
-        _merchants.TryGetValue(merchantId, out var merchant) ? merchant : null;
+    public MarketplaceService(IMarketplaceDataPlugin? data = null) => _data = data;
+
+    public MarketplaceMerchant? GetMerchant(UUID merchantId)
+        => _data?.GetMerchant(merchantId) ?? (_merchants.TryGetValue(merchantId, out var m) ? m : null);
 
     public MarketplaceMerchant GetOrCreateMerchant(UUID merchantId)
     {
         lock (_sync)
         {
-            if (_merchants.TryGetValue(merchantId, out var merchant))
-                return merchant;
+            var existing = GetMerchant(merchantId);
+            if (existing != null)
+                return existing;
 
-            merchant = new MarketplaceMerchant(
-                merchantId,
-                "Marketplace Store",
-                merchantId.ToString(),
-                string.Empty,
-                true);
+            var merchant = new MarketplaceMerchant(
+                merchantId, "Marketplace Store", merchantId.ToString(), string.Empty, true);
 
-            _merchants.Add(merchantId, merchant);
+            if (_data != null)
+                _data.StoreMerchant(merchant);
+            else
+                _merchants[merchantId] = merchant;
+
             return merchant;
         }
     }
 
-    public MarketplaceStore? GetStore(UUID storeId) =>
-        _stores.TryGetValue(storeId, out var store) ? store : null;
+    public MarketplaceStore? GetStore(UUID storeId)
+        => _data?.GetStore(storeId) ?? (_stores.TryGetValue(storeId, out var s) ? s : null);
 
     public MarketplaceStore GetOrCreateStore(UUID merchantId)
     {
         lock (_sync)
         {
-            var existing = _stores.Values.FirstOrDefault(x => x.MerchantId == merchantId);
+            var existing = _data?.GetStoreByMerchant(merchantId)
+                ?? _stores.Values.FirstOrDefault(x => x.MerchantId == merchantId);
             if (existing != null)
                 return existing;
 
             var store = new MarketplaceStore(
-                UUID.Random(),
-                merchantId,
-                "Marketplace Store",
-                merchantId.ToString(),
-                string.Empty,
-                true);
+                UUID.Random(), merchantId, "Marketplace Store",
+                merchantId.ToString(), string.Empty, true);
 
-            _stores.Add(store.StoreId, store);
+            if (_data != null)
+                _data.StoreStore(store);
+            else
+                _stores[store.StoreId] = store;
+
             return store;
         }
     }
 
-    public MarketplaceListing? GetListing(UUID listingId) =>
-        _listings.TryGetValue(listingId, out var listing) ? listing : null;
+    public MarketplaceListing? GetListing(UUID listingId)
+        => _data?.GetListing(listingId) ?? (_listings.TryGetValue(listingId, out var l) ? l : null);
 
     public MarketplaceListing? GetListingByMarketplaceId(int marketplaceId)
-    {
-        lock (_sync)
-        {
-            return _marketplaceIds.TryGetValue(marketplaceId, out var listingId)
-                ? GetListing(listingId)
-                : null;
-        }
-    }
+        => _data?.GetListingByMarketplaceId(marketplaceId)
+            ?? (_marketplaceIds.TryGetValue(marketplaceId, out var id) ? GetListing(id) : null);
 
     public IReadOnlyCollection<MarketplaceListing> GetListings(UUID merchantId)
-    {
-        lock (_sync)
-            return _listings.Values.Where(x => x.MerchantId == merchantId).ToArray();
-    }
+        => _data?.GetListings(merchantId)
+            ?? _listings.Values.Where(x => x.MerchantId == merchantId).ToArray();
 
     public MarketplaceListing CreateListing(
-        UUID merchantId,
-        UUID storeId,
-        UUID listingFolderId,
-        UUID versionFolderId,
-        UUID inventoryItemId,
-        UUID assetId,
-        string name,
-        string description,
-        string category,
-        IEnumerable<string> tags,
-        int price,
-        int quantity,
-        bool isUnlimited,
-        bool isDemo)
+        UUID merchantId, UUID storeId, UUID listingFolderId, UUID versionFolderId,
+        UUID inventoryItemId, UUID assetId, string name, string description,
+        string category, IEnumerable<string> tags, int price, int quantity,
+        bool isUnlimited, bool isDemo)
     {
         if (price < 0)
             throw new ArgumentOutOfRangeException(nameof(price));
-
         if (!isUnlimited && quantity < 0)
             throw new ArgumentOutOfRangeException(nameof(quantity));
 
         lock (_sync)
         {
-            var marketplaceId = _nextMarketplaceId++;
             var listing = new MarketplaceListing(
-                UUID.Random(),
-                marketplaceId,
-                merchantId,
-                storeId,
-                listingFolderId,
-                versionFolderId,
-                inventoryItemId,
-                assetId,
-                name,
-                description,
-                category,
+                UUID.Random(), _nextMarketplaceId++, merchantId, storeId,
+                listingFolderId, versionFolderId, inventoryItemId, assetId,
+                name, description, category,
                 tags.Distinct(StringComparer.OrdinalIgnoreCase).ToArray(),
-                price,
-                quantity,
-                isUnlimited,
-                isDemo,
+                price, quantity, isUnlimited, isDemo,
                 MarketplaceListingStatus.Draft);
 
-            _listings.Add(listing.ListingId, listing);
-            _marketplaceIds.Add(marketplaceId, listing.ListingId);
+            if (_data != null)
+                return _data.StoreListing(listing);
+
+            _listings[listing.ListingId] = listing;
+            _marketplaceIds[listing.MarketplaceId] = listing.ListingId;
             return listing;
         }
     }
 
     public MarketplaceListing UpdateListing(
-        int marketplaceId,
-        UUID merchantId,
-        UUID listingFolderId,
-        UUID versionFolderId,
-        bool isListed,
-        int countOnHand)
+        int marketplaceId, UUID merchantId, UUID listingFolderId,
+        UUID versionFolderId, bool isListed, int countOnHand)
     {
         lock (_sync)
         {
@@ -144,19 +118,21 @@ public sealed class MarketplaceService : IMarketplaceService
                 ?? throw new InvalidOperationException("Marketplace listing was not found.");
 
             if (listing.MerchantId != merchantId)
-                throw new UnauthorizedAccessException("Marketplace listing belongs to another merchant.");
-
-            var status = isListed
-                ? MarketplaceListingStatus.Active
-                : MarketplaceListingStatus.Draft;
+                throw new UnauthorizedAccessException(
+                    "Marketplace listing belongs to another merchant.");
 
             var updated = listing with
             {
                 ListingFolderId = listingFolderId,
                 VersionFolderId = versionFolderId,
                 Quantity = countOnHand,
-                Status = status
+                Status = isListed
+                    ? MarketplaceListingStatus.Active
+                    : MarketplaceListingStatus.Draft
             };
+
+            if (_data != null)
+                return _data.UpdateListing(updated);
 
             _listings[listing.ListingId] = updated;
             return updated;
@@ -167,12 +143,16 @@ public sealed class MarketplaceService : IMarketplaceService
     {
         lock (_sync)
         {
+            if (_data != null)
+                return _data.DeleteListing(marketplaceId, merchantId);
+
             if (!_marketplaceIds.TryGetValue(marketplaceId, out var listingId) ||
                 !_listings.TryGetValue(listingId, out var listing))
                 return false;
 
             if (listing.MerchantId != merchantId)
-                throw new UnauthorizedAccessException("Marketplace listing belongs to another merchant.");
+                throw new UnauthorizedAccessException(
+                    "Marketplace listing belongs to another merchant.");
 
             _listings.Remove(listingId);
             _marketplaceIds.Remove(marketplaceId);
@@ -185,22 +165,37 @@ public sealed class MarketplaceService : IMarketplaceService
         if (request.Quantity < 1)
             throw new ArgumentOutOfRangeException(nameof(request.Quantity));
 
-        if (!_listings.TryGetValue(request.ListingId, out var listing))
-            throw new InvalidOperationException("Marketplace listing was not found.");
+        lock (_sync)
+        {
+            if (_data != null)
+            {
+                var prior = _data.GetOrderByIdempotency(request.BuyerId, request.IdempotencyKey);
+                if (prior != null)
+                    return new MarketplacePurchaseResult(
+                        prior.OrderId, prior.Status, prior.TotalPrice,
+                        prior.PaymentTransactionId, null);
+            }
 
-        if (listing.Status != MarketplaceListingStatus.Active)
-            throw new InvalidOperationException("Marketplace listing is not available.");
+            var listing = GetListing(request.ListingId)
+                ?? throw new InvalidOperationException("Marketplace listing was not found.");
 
-        if (!listing.IsUnlimited && request.Quantity > listing.Quantity)
-            throw new InvalidOperationException("Requested quantity is not available.");
+            if (listing.Status != MarketplaceListingStatus.Active)
+                throw new InvalidOperationException("Marketplace listing is not available.");
 
-        var total = checked(listing.Price * request.Quantity);
+            if (!listing.IsUnlimited && request.Quantity > listing.Quantity)
+                throw new InvalidOperationException("Requested quantity is not available.");
 
-        return new MarketplacePurchaseResult(
-            UUID.Random(),
-            MarketplaceOrderStatus.PendingPayment,
-            total,
-            string.Empty,
-            null);
+            var total = checked(listing.Price * request.Quantity);
+            var order = new MarketplaceOrder(
+                UUID.Random(), request.BuyerId, listing.MerchantId, listing.ListingId,
+                request.Quantity, listing.Price, total,
+                MarketplaceOrderStatus.PendingPayment, string.Empty, null, null,
+                DateTimeOffset.UtcNow, DateTimeOffset.UtcNow);
+
+            _data?.StoreOrder(order, request.IdempotencyKey);
+
+            return new MarketplacePurchaseResult(
+                order.OrderId, order.Status, total, string.Empty, null);
+        }
     }
 }
