@@ -8,6 +8,7 @@ using OpenSim.Framework.Servers.HttpServer;
 using OpenSim.Region.Framework.Interfaces;
 using OpenSim.Region.Framework.Scenes;
 using OpenSim.Services.Marketplace;
+using OpenSim.Services.Interfaces;
 
 namespace OpenSim.Region.CoreModules.Framework.Marketplace;
 
@@ -20,6 +21,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
     private static readonly IMarketplaceService s_marketplace = new MarketplaceService();
 
     private Scene? _scene;
+    private IInventoryService? _inventory;
 
     public string Name => "Marketplace Capabilities Module";
     public Type ReplaceableInterface => null;
@@ -31,6 +33,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
     public void AddRegion(Scene scene)
     {
         _scene = scene;
+        _inventory = scene.RequestModuleInterface<IInventoryService>();
         scene.EventManager.OnRegisterCaps += OnRegisterCaps;
     }
 
@@ -42,6 +45,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
     {
         scene.EventManager.OnRegisterCaps -= OnRegisterCaps;
         _scene = null;
+        _inventory = null;
     }
 
     public void PostInitialise()
