@@ -102,6 +102,7 @@
 
 [ServiceList]
     AssetServiceConnector = "${Const|PrivatePort}/OpenSim.Server.Handlers.dll:AssetServiceConnector"
+    MarketplaceServiceConnector = "${Const|PublicPort}/OpenSim.Server.Handlers.dll:MarketplaceServiceConnector"
     InventoryInConnector = "${Const|PrivatePort}/OpenSim.Server.Handlers.dll:XInventoryInConnector"
     ;; Uncomment if you have set up Freeswitch (see [FreeswitchService] below)
     ;VoiceConnector = "8004/OpenSim.Server.Handlers.dll:FreeswitchServerConnector"
@@ -287,6 +288,12 @@
     ; If set to true, AllowRemoteDelete = true is required as well.
     ; Default is false.
     AllowRemoteDeleteAllTypes = false
+
+
+; * Marketplace inventory-import compatibility service.
+; * Firestorm uses the public MarketplaceURL for /api/1/{agent}/inventory/import/.
+[MarketplaceService]
+    InventoryService = "OpenSim.Services.InventoryService.dll:XInventoryService"
 
 
 ; * This configuration loads the inventory server modules. It duplicates
