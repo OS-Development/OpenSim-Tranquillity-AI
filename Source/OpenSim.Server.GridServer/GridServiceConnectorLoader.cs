@@ -24,13 +24,16 @@ public sealed class GridServiceConnectorLoader : IServiceConnectorLoader
 {
     private readonly ILogger<GridServiceConnectorLoader> _logger;
     private readonly IMainServerAccessor _mainServerAccessor;
+    private readonly IStartupFailureCoordinator _startupFailureCoordinator;
 
     public GridServiceConnectorLoader(
         ILogger<GridServiceConnectorLoader> logger,
-        IMainServerAccessor mainServerAccessor)
+        IMainServerAccessor mainServerAccessor,
+        IStartupFailureCoordinator startupFailureCoordinator)
     {
         _logger = logger;
         _mainServerAccessor = mainServerAccessor;
+        _startupFailureCoordinator = startupFailureCoordinator;
     }
 
     /// <inheritdoc/>
@@ -125,6 +128,13 @@ public sealed class GridServiceConnectorLoader : IServiceConnectorLoader
             else
             {
                 _logger.LogError("[SERVER]: Failed to load {Conn}", conn);
+
+                if (friendlyName == "MarketplaceServiceConnector")
+                {
+                    _startupFailureCoordinator.ThrowFatal(
+                        "Fatal error while loading MarketplaceServiceConnector. " +
+                        "Marketplace database initialization or connector construction failed.");
+                }
             }
         }
 
