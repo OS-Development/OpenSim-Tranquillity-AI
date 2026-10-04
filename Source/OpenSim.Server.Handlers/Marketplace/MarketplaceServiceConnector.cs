@@ -1,4 +1,6 @@
+using System.Reflection;
 using Nini.Config;
+using Microsoft.Extensions.Logging;
 using OpenSim.Framework.Servers.HttpServer;
 using OpenSim.Server.Base;
 using OpenSim.Server.Handlers.Base;
@@ -9,6 +11,9 @@ namespace OpenSim.Server.Handlers.Marketplace;
 
 public sealed class MarketplaceServiceConnector : ServiceConnector
 {
+    private static readonly ILogger m_log =
+        LoggerProvider.CreateLogger(MethodBase.GetCurrentMethod().DeclaringType);
+
     private readonly IInventoryService _inventory;
     private readonly IMarketplaceDataPlugin? _data;
 
@@ -31,7 +36,37 @@ public sealed class MarketplaceServiceConnector : ServiceConnector
             new object[] { config, "InventoryService" })
             ?? throw new Exception($"Failed to load inventory service from {inventoryService}");
 
-        _data = LoadMarketplaceData(config, serviceConfig);
+        try
+        {
+            _data = LoadMarketplaceData(config, serviceConfig);
+
+            if (_data != null)
+            {
+                m_log.LogInformation(
+                    "[MARKETPLACE]: Database initialization completed successfully using provider {Provider}",
+                    serviceConfig.GetString("StorageProvider", string.Empty));
+            }
+            else
+            {
+                m_log.LogWarning(
+                    "[MARKETPLACE]: No Marketplace database provider is configured. " +
+                    "Marketplace persistence is disabled and the service will use in-memory state.");
+            }
+        }
+        catch (Exception e)
+        {
+            m_log.LogCritical(
+                e,
+                "[MARKETPLACE]: FATAL database initialization failure. " +
+                "Marketplace startup cannot continue. StorageProvider={Provider}, " +
+                "ConnectionStringConfigured={ConnectionStringConfigured}",
+                serviceConfig.GetString("StorageProvider", string.Empty),
+                !string.IsNullOrWhiteSpace(serviceConfig.GetString("ConnectionString", string.Empty)));
+
+            throw new InvalidOperationException(
+                "Marketplace database initialization failed. See the preceding [MARKETPLACE] log entry for the provider and configuration state.",
+                e);
+        }
 
         server.AddSimpleStreamHandler(
             new MarketplaceInventoryImportHandler(_inventory),
