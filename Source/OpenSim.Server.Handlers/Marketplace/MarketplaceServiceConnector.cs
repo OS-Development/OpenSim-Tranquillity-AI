@@ -36,15 +36,17 @@ public sealed class MarketplaceServiceConnector : ServiceConnector
             new object[] { config, "InventoryService" })
             ?? throw new Exception($"Failed to load inventory service from {inventoryService}");
 
+        string resolvedStorageProvider = string.Empty;
+
         try
         {
-            _data = LoadMarketplaceData(config, serviceConfig);
+            _data = LoadMarketplaceData(config, serviceConfig, out resolvedStorageProvider);
 
             if (_data != null)
             {
                 m_log.LogInformation(
                     "[MARKETPLACE]: Database initialization completed successfully using provider {Provider}",
-                    serviceConfig.GetString("StorageProvider", string.Empty));
+                    resolvedStorageProvider);
             }
             else
             {
@@ -60,7 +62,7 @@ public sealed class MarketplaceServiceConnector : ServiceConnector
                 "[MARKETPLACE]: FATAL database initialization failure. " +
                 "Marketplace startup cannot continue. StorageProvider={Provider}, " +
                 "ConnectionStringConfigured={ConnectionStringConfigured}",
-                serviceConfig.GetString("StorageProvider", string.Empty),
+                resolvedStorageProvider,
                 !string.IsNullOrWhiteSpace(serviceConfig.GetString("ConnectionString", string.Empty)));
 
             throw new InvalidOperationException(
@@ -75,7 +77,8 @@ public sealed class MarketplaceServiceConnector : ServiceConnector
 
     private static IMarketplaceDataPlugin? LoadMarketplaceData(
         IConfigSource config,
-        IConfig serviceConfig)
+        IConfig serviceConfig,
+        out string resolvedStorageProvider)
     {
         string storageProvider = serviceConfig.GetString("StorageProvider", string.Empty);
         string connectionString = serviceConfig.GetString("ConnectionString", string.Empty);
@@ -97,12 +100,14 @@ public sealed class MarketplaceServiceConnector : ServiceConnector
             }
         }
 
+        resolvedStorageProvider = storageProvider;
+
         if (string.IsNullOrWhiteSpace(storageProvider))
             return null;
 
         if (string.IsNullOrWhiteSpace(connectionString))
             throw new Exception(
-                "MarketplaceService has StorageProvider configured but no ConnectionString was supplied.");
+                $"MarketplaceService resolved StorageProvider '{storageProvider}' but no ConnectionString was supplied.");
 
         var data = ServerUtils.LoadPlugin<IMarketplaceDataPlugin>(
             storageProvider,
