@@ -37,10 +37,15 @@ public sealed class MarketplaceServiceConnector : ServiceConnector
             ?? throw new Exception($"Failed to load inventory service from {inventoryService}");
 
         string resolvedStorageProvider = string.Empty;
+        bool resolvedConnectionStringConfigured = false;
 
         try
         {
-            _data = LoadMarketplaceData(config, serviceConfig, out resolvedStorageProvider);
+            _data = LoadMarketplaceData(
+                config,
+                serviceConfig,
+                out resolvedStorageProvider,
+                out resolvedConnectionStringConfigured);
 
             if (_data != null)
             {
@@ -63,7 +68,7 @@ public sealed class MarketplaceServiceConnector : ServiceConnector
                 "Marketplace startup cannot continue. StorageProvider={Provider}, " +
                 "ConnectionStringConfigured={ConnectionStringConfigured}",
                 resolvedStorageProvider,
-                !string.IsNullOrWhiteSpace(serviceConfig.GetString("ConnectionString", string.Empty)));
+                resolvedConnectionStringConfigured);
 
             throw new InvalidOperationException(
                 "Marketplace database initialization failed. See the preceding [MARKETPLACE] log entry for the provider and configuration state.",
@@ -78,7 +83,8 @@ public sealed class MarketplaceServiceConnector : ServiceConnector
     private static IMarketplaceDataPlugin? LoadMarketplaceData(
         IConfigSource config,
         IConfig serviceConfig,
-        out string resolvedStorageProvider)
+        out string resolvedStorageProvider,
+        out bool resolvedConnectionStringConfigured)
     {
         string storageProvider = serviceConfig.GetString("StorageProvider", string.Empty);
         string connectionString = serviceConfig.GetString("ConnectionString", string.Empty);
@@ -101,6 +107,7 @@ public sealed class MarketplaceServiceConnector : ServiceConnector
         }
 
         resolvedStorageProvider = storageProvider;
+        resolvedConnectionStringConfigured = !string.IsNullOrWhiteSpace(connectionString);
 
         if (string.IsNullOrWhiteSpace(storageProvider))
             return null;
