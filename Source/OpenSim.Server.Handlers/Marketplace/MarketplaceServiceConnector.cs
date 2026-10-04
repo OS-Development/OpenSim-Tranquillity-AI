@@ -1,6 +1,7 @@
 using System.Reflection;
 using Nini.Config;
 using Microsoft.Extensions.Logging;
+using OpenSim.Framework;
 using OpenSim.Framework.Servers.HttpServer;
 using OpenSim.Server.Base;
 using OpenSim.Server.Handlers.Base;
