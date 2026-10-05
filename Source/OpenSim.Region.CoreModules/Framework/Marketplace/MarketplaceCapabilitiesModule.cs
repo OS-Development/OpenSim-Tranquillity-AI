@@ -92,7 +92,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
 
         caps.RegisterSimpleHandler("DirectDelivery", handler, true, true);
 
-        m_log.LogDebug(
+        m_log.LogInformation(
             "[MARKETPLACE]: Registered DirectDelivery for agent {0}: {1}",
             agentId,
             path);
@@ -117,6 +117,12 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
         var route = basePath[(directDeliveryIndex + "/DirectDelivery".Length)..];
         if (string.IsNullOrEmpty(route))
             route = "/";
+
+        m_log.LogInformation(
+            "[MARKETPLACE]: DirectDelivery request agent={0} method={1} route={2}",
+            agentId,
+            request.HttpMethod,
+            route);
 
         try
         {
@@ -166,7 +172,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
         if (route.Equals("/merchant", StringComparison.OrdinalIgnoreCase))
         {
             _marketplace.GetOrCreateMerchant(agentId);
-            m_log.LogDebug("[MARKETPLACE]: /merchant requested for agent {0}", agentId);
+            m_log.LogInformation("[MARKETPLACE]: /merchant requested for agent {0}; returning HTTP 200 merchant=true", agentId);
             WriteJson(response, new { merchant = true });
             return;
         }
