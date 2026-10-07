@@ -265,10 +265,32 @@ These are facts about Phlox's compiler. Where SL's rule is known, it is cited.
   `script_state_rejected` table of the state database and the script starts fresh, as
   YEngine resets a script whose state file is bad. When the database itself fails (busy or
   locked), the script is held stopped and its row kept, and the next restart tries again.
+- **Writes the database refuses.** A save or a delete the database does not take (busy,
+  locked, or failing) stays queued in order and is tried again; a batch of writes is all
+  or nothing. A write that fails five times is given up, with an error in the log naming
+  the script. At shutdown every queued write is tried to that bound, and the log names
+  each write that was not saved. A script loaded while its last save is still queued is
+  restored from that save, not from the older row.
+- **A state that cannot be saved.** A script whose tables nest more than 200 deep, or that
+  holds a closure referring back to itself, keeps running, but its state cannot be saved
+  while it is so. Its older saved state is not kept for a restart to resume from: the row
+  is moved to the `script_state_rejected` table, with one error in the log naming the
+  script ("cannot be captured ... cannot be restored in its place"), and a restart starts
+  the script fresh with `state_entry`. As soon as its state can be saved again, the next
+  save writes a normal row. The error is written once, and again only after a later save of
+  it has worked. A save that fails only because the state changed while it was copied
+  keeps the older row.
+- **Shutdown with a script stuck in a call.** The final save waits 5 seconds for the
+  script scheduler to stop. If a script is still inside a call then, the scheduler runs
+  nothing further, that script keeps its last saved state, and every other script is
+  saved. A part of a script's state that cannot be copied fails that script's save; it is
+  never saved empty.
 - **When rows go.** Deleting a script from a prim deletes its row. A derez, take or crossing
   keeps it; an object that comes back carrying its state uses that state first. `[InWorldz.Phlox]
   StateRowMaxAgeDays` (default 0, off) deletes rows not saved or loaded for that many days
-  whose scripts are not loaded in the simulator.
+  whose scripts are not loaded in the simulator. When an object crosses between two regions
+  of one simulator, the region it left never writes over the row the region it entered has
+  saved, whichever region handles the move first.
 - **State carried inside objects.** Phlox puts a script's saved state in its serialized
   object, in YEngine's envelope
   (`<State Engine="InWorldz.Phlox" UUID="item" Asset="asset" Version="1"><ScriptState>...`),
@@ -329,7 +351,9 @@ These are facts about Phlox's compiler. Where SL's rule is known, it is cited.
     whatever has arrived, and the event comes once. The script runs its other events
     meanwhile. Halcyon waits for every rider the same way, with no limit. A rider whose
     grant no script in the vehicle holds is not waited for, as the simulator does not tell
-    the new region which riders are coming.
+    the new region which riders are coming. A script of the vehicle that arrived with state
+    and has not loaded yet counts as holding such a grant until it has loaded, within the
+    same 10 seconds.
   - A script held stopped because its row could not be read carries no state.
   - Objects saved by an earlier Phlox build carry no Phlox state and start fresh as before.
 - **Carried state is checked as input from outside.** It can come from anywhere: inventory
@@ -357,7 +381,13 @@ These are facts about Phlox's compiler. Where SL's rule is known, it is cited.
   crossing; [llRequestPermissions](https://wiki.secondlife.com/wiki/LlRequestPermissions)
   says only "Permissions persist across state changes".
   - From the region's own state database (a restart): the grant comes back whole, when the
-    object's owner is still the owner saved with it. Otherwise nothing comes back.
+    object's owner is still the owner saved with it. Otherwise nothing comes back. A grant
+    still waiting for its granter when the state was saved is decided as carried state
+    below, from a row too. A row saved when the object can no longer be found keeps the
+    grant the script holds, which Phlox notes in the state each time the grant changes:
+    after a derez, at a region stop (the simulator empties the scene before the final
+    save) and when a region is removed from the engine. A grant still waiting for its
+    granter is never saved as a grant in such a row.
   - From state carried inside an object (take and rez, take copy, attach, login, teleport,
     crossing): only what `llRequestPermissions` would grant at that moment without a
     dialog comes back, by the same decision: the granter wears the object (take controls,
@@ -382,6 +412,14 @@ These are facts about Phlox's compiler. Where SL's rule is known, it is cited.
     while the item holds their grant, and wait with a grant that waits.
   - `llResetScript`, an owner change and a new `llRequestPermissions` or
     `llRequestExperiencePermissions` clear the saved grant and a waiting one.
+  - A permission request still waiting for its answer, from `llRequestPermissions` or
+    `llRequestExperiencePermissions`, ends when the script is reset, the object changes
+    owner, or the script leaves the region (derez, crossing, teleport): an answer that comes
+    later does nothing, and posts no event. The SL wiki says so for
+    [llRequestExperiencePermissions](https://wiki.secondlife.com/wiki/LlRequestExperiencePermissions)
+    ("Outstanding permission requests will be lost if the script is de-rezzed, moved to
+    another region, or reset"); the llRequestPermissions page says nothing on it, and the
+    same rule is applied.
   - A grant from an Experience: when `llRequestExperiencePermissions` grants (the agent
     allowed the Experience before, the Experience is trusted here, or the agent accepts the
     dialog), the script holds the permissions SL lists for it (take controls, trigger
@@ -389,13 +427,35 @@ These are facts about Phlox's compiler. Where SL's rule is known, it is cited.
     `llGetPermissions` and `llGetPermissionsKey` answer them as in SL
     ([llRequestExperiencePermissions](https://wiki.secondlife.com/wiki/LlRequestExperiencePermissions)),
     and the grant is saved as that Experience's. From the region's own state database it
-    comes back whole, as any grant. From carried state it comes back only when
+    comes back whole, as any grant, unless the region no longer lets the Experience run (the
+    estate blocks it, or neither allows nor trusts it): then it ends as the script starts, and
+    the script gets `experience_permissions_denied` with `XP_ERROR_NOT_PERMITTED_LAND` (17)
+    once, as below for a parcel. From carried state it comes back only when
     `llRequestExperiencePermissions` would grant it at that moment with no dialog: the script
     is still in that Experience, the Experience is allowed in the region and not blocked, and
     the granter is in the region, has not blocked it, and has allowed it (or it is trusted
     here). A granter who has not arrived yet leaves it waiting; it is decided when that avatar
     arrives anywhere in the region, as such a grant needs no seat or attachment. Neither
     `run_time_permissions` nor `experience_permissions` is posted by a restore.
+  - A script's Experience is the one its script item names, never one named in saved state or
+    in state that came with the object. A saved grant noted with an Experience the item does
+    not name, whether from the region's own state database or carried in the object, ends
+    before the script runs, with no event and nothing left waiting for its granter. State
+    that came with an object whose script is in no Experience also loses any
+    `experience_permissions` event still on its queue.
+  - A grant from an Experience ends when its granter enters a parcel where the Experience
+    cannot run: the estate blocks it, or neither allows nor trusts it. The script loses the
+    grant and the controls it took, and gets `experience_permissions_denied` with
+    `XP_ERROR_NOT_PERMITTED_LAND` (17), as SL lists under "The experience can no longer run":
+    "The agent has moved to a parcel where the experience cannot run"
+    ([experience_permissions_denied](https://wiki.secondlife.com/wiki/Experience_permissions_denied)).
+  - When an avatar blocks an Experience from its profile, the simulator ends every grant that
+    avatar gave to a script of that Experience and posts `experience_permissions_denied` with
+    `XP_ERROR_NOT_PERMITTED` (4), as SL lists: "The agent has blocked the experience from the
+    experience profile". The script gets that event once, loses the controls it took, and a
+    region restart does not give the grant back. A request the script is still waiting on from
+    that avatar ends with that one answer. The same avatar's grants to scripts of other
+    Experiences, and other avatars' grants, stay.
   - States saved by an earlier Phlox build hold no grant and restore without one.
   - When a region starts, once the scripts it starts have loaded, one line in the log says
     how many came back with their saved state and how many of those got a grant back:
@@ -425,7 +485,7 @@ These are facts about Phlox's compiler. Where SL's rule is known, it is cited.
   - the LightShare `ls*` functions;
   - the `mod*` functions (`modInvoke*`, `modSendCommand`);
   - `llRemoteLoadScript`;
-  - ten OSSL functions: `osGiveLinkInventory`, `osGiveLinkInventoryList`, `osMakeNotecard`,
+  - nine OSSL functions: `osGiveLinkInventory`, `osGiveLinkInventoryList`,
     `osMessageAttachments`, `osNpcLookAt`, `osNpcSayTo`, `osReplaceAgentEnvironment`,
     `osReplaceParcelEnvironment`, `osReplaceRegionEnvironment`, `osResetEnvironment`.
 - **Spelled differently:** YEngine's `osTemperature2sRBG` is `osTemperature2sRGB` on Phlox.
@@ -433,7 +493,7 @@ These are facts about Phlox's compiler. Where SL's rule is known, it is cited.
   - the `iw*` and `bot*` families (section 3);
   - some newer SL functions, for example `llSetAgentRot`, `llSortListStrided` and
     `llTransferOwnership`.
-- Phlox declares 258 OSSL functions. They honour the `[OSSL]` keys (`AllowOSFunctions`,
+- Phlox declares 259 OSSL functions. They honour the `[OSSL]` keys (`AllowOSFunctions`,
   `OSFunctionThreatLevel`, `PermissionErrorToOwner`, `Allow_<function>`,
   `Creators_<function>`) with the same meanings as YEngine.
 
@@ -501,6 +561,24 @@ pauses 15 ms after every chat call instead (`ChatThrottle`).
   The SL wiki says of `llGroundNormal`: "This function does not return a unit vector."
 - `llApplyImpulse` in an attachment pushes the wearer, as in YEngine and Halcyon. `llApplyRotationalImpulse` in an
   attachment does nothing, as the SL wiki says ("It does not work on attachments"); Halcyon turned the wearer.
+- `llCastRay` that the physics engine refuses (for example a cast over the engine's time or hit budget) returns
+  `[RCERR_CAST_TIME_EXCEEDED]`. The region log gets at most one warning per script per minute for it: the first
+  refused cast writes one at once, and the next, written by the first cast refused after the minute is up, gives the
+  number of casts refused since that script's warning before:
+  `[PhloxAPI]: llCastRay refused for script <item id> in <object>; refused casts since its last warning: <count>; reason: <reason>`.
+  Before, every refused cast wrote its own line, so a script casting in a loop could write thousands a second.
+- `llPushObject` with `local` TRUE turns the impulse by the target's rotation, avatar or object, as the SL wiki says:
+  "if TRUE uses the local axis of target, if FALSE uses the region axis"
+  ([LlPushObject](https://wiki.secondlife.com/wiki/LlPushObject)). YEngine does the same. A local push on an avatar
+  used to be turned by the pushing prim's rotation. `ang_impulse` is not applied to an avatar ("ang_impulse is
+  ignored when applying to agents or their attachments"), and Phlox does not apply it to objects either.
+- `llPushObject` on land where pushing is restricted, by the parcel's Restrict Pushing or by the region's setting:
+  an object may push its owner, and so an attachment may push its wearer, as the SL wiki says: "In no-push areas an
+  object can only push its owner or itself." Phlox used to refuse it. Pushing another avatar there still works only
+  for an object owned by the land's owner or by the estate owner or an estate manager, and on a region that restricts
+  pushing, an avatar with no parcel under it can only be pushed by its own objects. YEngine allows an object to push its
+  owner on both settings, but refuses when the region restricts pushing and finds no parcel; YEngine also lets any
+  object push on group-owned land, and does not give estate managers an exception.
 - `llGetPos` and `PRIM_POSITION` of a child prim in an attachment give the child's offset turned by the wearer's
   rotation plus the wearer's position (Halcyon's rule). YEngine gives the child's position from the attachment
   root's rotation, which does not follow the wearer turning.
@@ -521,6 +599,15 @@ pauses 15 ms after every chat call instead (`ChatThrottle`).
 - `llGetUsername` returns "First Last" where YEngine returns "first.last". Both answer only for
   an avatar the region holds (root or child agent), else `""`; `llRequestUsername` answers for
   anyone.
+- `llManageEstateAccess` never bans the estate owner's partner, the partner named on the estate
+  owner's profile, as Halcyon refused it: the call returns `FALSE`, nothing changes, and neither
+  an IM nor an error is sent, as for the estate owner. When the estate owner's profile cannot be
+  read, the ban goes ahead and the region's log says so. SL documents no partner rule.
+- `llGetExperienceDetails(NULL_KEY)` gives the details of the script's own Experience, the one
+  its script item names, and an empty list for a script in no Experience, as SL documents: "If
+  experience_id is NULL_KEY, then information about the script's experience is returned. In
+  this situation, if the script isn't associated with an experience, an empty list is returned"
+  ([LlGetExperienceDetails](https://wiki.secondlife.com/wiki/LlGetExperienceDetails)).
 - Start-up events come in SL's order: `state_entry` (a new script), then `on_rez`, then
   `attach` (an attachment worn from inventory), then `changed(CHANGED_REGION_START)`, which every
   script started by the region's start gets, new or restored. YEngine posts them in the same order.
@@ -647,12 +734,19 @@ name) promises.
 and gives the error "llRefreshPrimURL - not yet supported", as Halcyon did; SL documents it as
 deprecated and doing nothing.
 
-`iwCheckRezError` answers from the region's rez checks: `IW_REZ_NO_LAND_PARCEL` where there is
+`iwCheckRezError` answers from the region's rez checks: `IW_REZ_NOT_PERMITTED` for an owner the
+region blocks from rezzing (asked first, as Halcyon did), `IW_REZ_NO_LAND_PARCEL` where there is
 no parcel, `IW_REZ_NOT_PERMITTED` where the owner may not rez, `IW_REZ_PARCEL_LAND_IMPACT`
 where the prims would go over the parcel's limits, otherwise `IW_REZ_OK`. It never returns
 `IW_REZ_REGION_SCENIC` or `IW_REZ_REGION_LAND_IMPACT`. `isTemp` is not used, as in Halcyon.
 When the prims would not fit, the region's prim-limit module may also send the owner the
 message it sends for a refused rez.
+
+A region can block an owner from rezzing (the console's `block owner`, or `[BlockedOwners]
+BlockEstateBanned`). A Phlox script whose object's owner is blocked rezzes nothing: `llRezObject`,
+`llRezAtRoot`, `llRezObjectWithParams`, `iwRezObject`, `iwRezAtRoot` and `iwRezAt` fail with no
+error and a 100 ms pause, before any other check, as Halcyon's bad-user check did. SL has no
+such list.
 
 ### Functions that act only in part
 - `llRezObjectWithParams`:
@@ -712,6 +806,11 @@ message it sends for a refused rez.
 - `PRIM_PHYSICS_MATERIAL` can be set, but reading it returns nothing.
 - `PRIM_SIT_FLAGS`: `SIT_FLAG_NO_COLLIDE` and `SIT_FLAG_NO_DAMAGE` are stored for read-back
   only.
+- `PRIM_SIT_TARGET` with a nonzero active value sets a target at `ZERO_VECTOR` with
+  `ZERO_ROTATION`, as SL documents, and it reads back exactly. The region database does not
+  save the target's on/off state, so after a region restart such a target is off (a take and
+  rez, a crossing or an archive keep it). YEngine keeps it across a restart by storing a
+  1e-5 m offset, which reads back.
 - For seated avatars, only position and rotation rules apply.
 - `PRIM_MATERIAL` with a value outside 0 to 7 is ignored (Halcyon refused the whole call).
 - `PRIM_FLEXIBLE` makes the whole object phantom when it turns a prim flexible, as YEngine does.
@@ -719,6 +818,10 @@ message it sends for a refused rez.
 
 ### Events
 - `game_control` compiles but is never raised.
+- When an avatar blocks an Experience from its profile while a script that holds no grant from
+  that avatar is waiting on `llRequestExperiencePermissions` for it, the simulator raises
+  nothing: the request is answered by the avatar's answer to the dialog, or after 5 minutes
+  with `XP_ERROR_REQUEST_PERM_TIMEOUT`.
 - `money` is raised only when the region has a money module.
 
 ### Engine

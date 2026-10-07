@@ -116,7 +116,7 @@ namespace Phlox.ScriptEngine
 
         // Permission ends the scene reports (the core's release of controls on an avatar still here, a new
         // owner). Queued from region threads; EndPermissions runs here, on the scheduler thread, like every script call.
-        private struct PermsEndReq { public UUID ItemId; public UUID AgentId; public SceneObjectGroup Group; }
+        private struct PermsEndReq { public UUID ItemId; public UUID AgentId; public SceneObjectGroup Group; public bool ExperienceEnded; public UUID Experience; }
         private readonly Queue<PermsEndReq> m_PermsEnds = new();
 
         /// <summary>What the parcel checks have done, for tests and the cost report.</summary>
@@ -168,6 +168,19 @@ namespace Phlox.ScriptEngine
         private readonly System.Collections.Generic.Dictionary<UUID, DeferredEvents> m_DeferredEvents = new();
         private long m_DroppedForUnloaded;
         private ulong m_NextDeferredExpiry;
+
+        // Events a full queue dropped, per script and kind, in the order each kind was first dropped, since the run's last
+        // log line. A run writes a line when it ends (LogEndedQueueFullRuns, DoUnload), and while it lasts one each
+        // QueueFullLineIntervalMs of the engine's clock with the drops since the line before: a burst of hundreds of
+        // drops is one line, not hundreds, and a queue that never has room again still shows, once a minute.
+        // Scheduler thread only.
+        internal const ulong QueueFullLineIntervalMs = 60_000;
+        private sealed class QueueFullRun
+        {
+            public ulong LineDueOn;
+            public readonly List<KeyValuePair<SupportedEventList.Events, int>> Counts = new();
+        }
+        private readonly System.Collections.Generic.Dictionary<UUID, QueueFullRun> m_QueueFullDrops = new();
 
         private readonly System.Diagnostics.Stopwatch m_SliceWatch = new();
 
@@ -612,16 +625,25 @@ namespace Phlox.ScriptEngine
         /// Does a script in <paramref name="group"/> hold a grant waiting for an avatar to arrive on the object (not one
         /// from an Experience, which needs no seat), from an avatar not in <paramref name="arrived"/>? The core crosses
         /// the object before its riders (SceneObjectGroup.CrossAsync) and tells the new region nothing of
-        /// them, so such a grant is the sign that a rider is still to come.
+        /// them, so such a grant is the sign that a rider is still to come. A script of the object whose carried state
+        /// has not been loaded yet counts as waiting too: its grant is not decided until it loads (the core hands every
+        /// script's state over before it starts any, SceneObjectGroup.SetState, and they load one by one).
         /// </summary>
         private bool GroupAwaitsRider(SceneObjectGroup group, HashSet<UUID> arrived)
         {
+            StateManager states = m_Engine?.StateManager;
             foreach (SceneObjectPart part in group.Parts)
                 foreach (TaskInventoryItem item in part.Inventory.GetInventoryItems(InventoryType.LSL))
-                    if (m_Apis.TryGetValue(item.ItemID, out LSLSystemAPI api)
-                        && api.WaitingSeatGranter is UUID granter && granter.IsNotZero()
-                        && (arrived == null || !arrived.Contains(granter)))
+                {
+                    if (m_Apis.TryGetValue(item.ItemID, out LSLSystemAPI api))
+                    {
+                        if (api.WaitingSeatGranter is UUID granter && granter.IsNotZero()
+                            && (arrived == null || !arrived.Contains(granter)))
+                            return true;
+                    }
+                    else if (states != null && states.HasCarried(item.ItemID))
                         return true;
+                }
             return false;
         }
 
@@ -1123,6 +1145,7 @@ namespace Phlox.ScriptEngine
             }
             m_Apis.Remove(itemId);
             m_ControlsExempt.Remove(itemId);
+            LogQueueFullRun(itemId);
         }
 
         /// <summary>
@@ -1150,8 +1173,29 @@ namespace Phlox.ScriptEngine
         /// <summary>The engine's [InWorldz.Phlox] section, for the parts built with this scheduler (the listen manager).</summary>
         internal Nini.Config.IConfig EngineConfig => m_Engine?.Config;
 
+        // The script in a timeslice now, and whether the scheduler is halted: a stop that did not end the scheduler's thread
+        // in time halts it, and a halted scheduler starts no further timeslice or pass.
+        private readonly object m_SliceLock = new object();
+        private Interpreter m_InSlice;
+        private bool m_Halted;
+
+        /// <summary>
+        /// The scheduler runs no further script: no new pass, no new timeslice. Returns the script in a timeslice now, which
+        /// keeps running until its slice ends, or null. For a final save whose scheduler thread did not stop.
+        /// </summary>
+        internal Interpreter Halt()
+        {
+            lock (m_SliceLock)
+            {
+                m_Halted = true;
+                return m_InSlice;
+            }
+        }
+
         public WorkStatus DoWork()
         {
+            lock (m_SliceLock)
+                if (m_Halted) return new WorkStatus { NextWakeUpTime = ulong.MaxValue };
             WorkerThreadId = System.Threading.Thread.CurrentThread.ManagedThreadId;
             // Script state is captured here, between timeslices, when the state thread asks for it (Halcyon
             // ExecutionScheduler.RequestStateData); the state thread only writes what it is handed.
@@ -1167,9 +1211,11 @@ namespace Phlox.ScriptEngine
             }
             ProcessObjectStateRequests();
             ProcessArrivedAvatars();
+            ProcessExperienceLandChecks();
             ProcessHeldArrivals();   // After the arrivals, whose waiting grants it waits for
             CheckSleepingScripts();
             ProcessEventQueue();
+            LogEndedQueueFullRuns();
             ExpireDeferredEvents();
             ProcessPermsEnds();      // Before the parcel checks it may call for
             ProcessParcelChecks();
@@ -1187,7 +1233,7 @@ namespace Phlox.ScriptEngine
             {
                 WorkWasDone = hadRunnable,
                 WorkIsPending = HasWork(),
-                NextWakeUpTime = Math.Min(Math.Min(nextWake, EarliestServiceDeadline()), EarliestHeldArrival())
+                NextWakeUpTime = Math.Min(Math.Min(Math.Min(nextWake, EarliestServiceDeadline()), EarliestHeldArrival()), EarliestQueueFullLine())
             };
         }
 
@@ -1206,6 +1252,7 @@ namespace Phlox.ScriptEngine
             lock (m_PermsEnds) if (m_PermsEnds.Count > 0) return true;
             lock (m_ObjectStateRequests) if (m_ObjectStateRequests.Count > 0) return true;
             lock (m_ArrivedAvatars) if (m_ArrivedAvatars.Count > 0) return true;
+            lock (m_ExperienceLandChecks) if (m_ExperienceLandChecks.Count > 0) return true;
             lock (m_SuspendResumeQueue) if (m_SuspendResumeQueue.Count > 0) return true;
             lock (m_PendingResets) if (m_PendingResets.Count > 0) return true;
             lock (m_SyscallReturns) if (m_SyscallReturns.Count > 0) return true;
@@ -1222,51 +1269,62 @@ namespace Phlox.ScriptEngine
                 var current = currentNode.Value;
                 int ticks = 0;
                 bool terminated = false;
-
-                m_SliceWatch.Restart();
-                while (ticks < SCRIPT_TIMESLICE)
+                lock (m_SliceLock)
                 {
-                    // A script put to sleep while it sat on the run queue (the reset throttle, on a reset from
-                    // outside its own slice) goes to the sleep heap untouched - its first opcode would overwrite the sleep.
-                    if (m_NextScript.Value.ScriptState.RunState == RuntimeState.Status.Sleeping)
-                    {
-                        CheckRunstateChange();
-                        break;
-                    }
-                    try { m_NextScript.Value.Tick(); }
-                    catch (Exception e)
-                    {
-                        // TerminateWithError marks the script Killed, but this path broke out of
-                        // the timeslice WITHOUT the Killed arm of CheckRunstateChange, so the node stayed on
-                        // the run queue and the next pass ticked the dead script again on a torn operand
-                        // stack - the "Unable to cast" and "Stack empty" stops that followed every OSSL
-                        // denial. Off the queue here, once.
-                        TerminateWithError(m_NextScript.Value, e);
-                        m_RunIndex.Remove(m_NextScript.Value.ItemId);
-                        m_RunQueue.Remove(m_NextScript);
-                        terminated = true;
-                    }
-
-                    iterations++;
-                    ticks++;
-
-                    if (terminated || CheckRunstateChange()) break;
+                    if (m_Halted) return;
+                    m_InSlice = current;
                 }
-                m_SliceWatch.Stop();
-
-                // Every timeslice marks the script for saving (Halcyon RunNextScript: "tell our state manager that we
-                // changed"), so one in a long loop, an llSleep or a blocking call is saved as it is now. A crash marked
-                // itself in TerminateWithError.
-                if (!terminated) m_Engine?.StateManager?.ScriptChanged(current);
-
-                // Guard against null after termination/removal
-			if (!terminated && m_NextScript != null && m_NextScript == currentNode)
+                try
                 {
-                    m_NextScript.Value.AddExecutionTime(m_SliceWatch.Elapsed.TotalMilliseconds);
+                    m_SliceWatch.Restart();
+                    while (ticks < SCRIPT_TIMESLICE)
+                    {
+                        // A script put to sleep while it sat on the run queue (the reset throttle, on a reset from
+                        // outside its own slice) goes to the sleep heap untouched - its first opcode would overwrite the sleep.
+                        if (m_NextScript.Value.ScriptState.RunState == RuntimeState.Status.Sleeping)
+                        {
+                            CheckRunstateChange();
+                            break;
+                        }
+                        try { m_NextScript.Value.Tick(); }
+                        catch (Exception e)
+                        {
+                            // TerminateWithError marks the script Killed, but this path broke out of
+                            // the timeslice WITHOUT the Killed arm of CheckRunstateChange, so the node stayed on
+                            // the run queue and the next pass ticked the dead script again on a torn operand
+                            // stack - the "Unable to cast" and "Stack empty" stops that followed every OSSL
+                            // denial. Off the queue here, once.
+                            TerminateWithError(m_NextScript.Value, e);
+                            m_RunIndex.Remove(m_NextScript.Value.ItemId);
+                            m_RunQueue.Remove(m_NextScript);
+                            terminated = true;
+                        }
 
-                    if (m_SliceWatch.Elapsed.TotalMilliseconds >= SLOW_THRESH_MS)
-                        m_log.LogWarning("[PhloxExe]: Slow timeslice for {0} ({1:F1}ms)",
-                            m_NextScript.Value.Script.AssetId, m_SliceWatch.Elapsed.TotalMilliseconds);
+                        iterations++;
+                        ticks++;
+
+                        if (terminated || CheckRunstateChange()) break;
+                    }
+                    m_SliceWatch.Stop();
+
+                    // Every timeslice marks the script for saving (Halcyon RunNextScript: "tell our state manager that we
+                    // changed"), so one in a long loop, an llSleep or a blocking call is saved as it is now. A crash marked
+                    // itself in TerminateWithError.
+                    if (!terminated) m_Engine?.StateManager?.ScriptChanged(current);
+
+                    // Guard against null after termination/removal
+                    if (!terminated && m_NextScript != null && m_NextScript == currentNode)
+                    {
+                        m_NextScript.Value.AddExecutionTime(m_SliceWatch.Elapsed.TotalMilliseconds);
+
+                        if (m_SliceWatch.Elapsed.TotalMilliseconds >= SLOW_THRESH_MS)
+                            m_log.LogWarning("[PhloxExe]: Slow timeslice for {0} ({1:F1}ms)",
+                                m_NextScript.Value.Script.AssetId, m_SliceWatch.Elapsed.TotalMilliseconds);
+                    }
+                }
+                finally
+                {
+                    lock (m_SliceLock) m_InSlice = null;
                 }
 
                 m_NextScript = followingScript ?? m_RunQueue.First;
@@ -1540,8 +1598,7 @@ namespace Phlox.ScriptEngine
                 int queueDepth = script.ScriptState.EventQueue.Count;
                 if (queueDepth >= MAX_EVENT_QUEUE_DEPTH && !OverflowsQueueLimit(pe.Evt.EventType))
                 {
-                    m_log.LogWarning("[PhloxExe]: Event queue full ({0} events) for script {1}, dropping {2} event",
-                        queueDepth, pe.ItemId, pe.Evt.EventType);
+                    CountQueueFullDrop(pe.ItemId, pe.Evt.EventType);
                     pe.Evt.SignalCompleted();
                     continue;
                 }
@@ -1582,6 +1639,71 @@ namespace Phlox.ScriptEngine
                     script.ScriptState.QueueEvent(pe.Evt);
                 }
             }
+        }
+
+        private void CountQueueFullDrop(UUID itemId, SupportedEventList.Events type)
+        {
+            if (!m_QueueFullDrops.TryGetValue(itemId, out var run))
+                m_QueueFullDrops[itemId] = run = new QueueFullRun { LineDueOn = InWorldz.Phlox.Util.Clock.Now + QueueFullLineIntervalMs };
+            var counts = run.Counts;
+            int i = counts.FindIndex(c => c.Key == type);
+            if (i < 0) counts.Add(new KeyValuePair<SupportedEventList.Events, int>(type, 1));
+            else counts[i] = new KeyValuePair<SupportedEventList.Events, int>(type, counts[i].Value + 1);
+        }
+
+        /// <summary>
+        /// A run of drops ends when the script's queue has room after a pass of posted events, or when the script is gone:
+        /// its last line is written then. A run still full when its line is due writes the drops so far and goes on.
+        /// </summary>
+        private void LogEndedQueueFullRuns()
+        {
+            if (m_QueueFullDrops.Count == 0) return;
+            ulong now = InWorldz.Phlox.Util.Clock.Now;
+            List<UUID> ended = null;
+            foreach (var run in m_QueueFullDrops)
+            {
+                if (m_AllScripts.TryGetValue(run.Key, out Interpreter script) && script.ScriptState.EventQueue.Count >= MAX_EVENT_QUEUE_DEPTH)
+                {
+                    if (now >= run.Value.LineDueOn)
+                    {
+                        WriteQueueFullLine(run.Key, run.Value.Counts);
+                        run.Value.LineDueOn = now + QueueFullLineIntervalMs;
+                    }
+                    continue;
+                }
+                (ended ??= new List<UUID>()).Add(run.Key);
+            }
+            if (ended == null) return;
+            foreach (UUID itemId in ended) LogQueueFullRun(itemId);
+        }
+
+        /// <summary>The run's last line, if it dropped anything since the line before.</summary>
+        private void LogQueueFullRun(UUID itemId)
+        {
+            if (m_QueueFullDrops.Remove(itemId, out var run)) WriteQueueFullLine(itemId, run.Counts);
+        }
+
+        /// <summary>When the next line of a lasting run is due, so the scheduler wakes for it (ulong.MaxValue: none).</summary>
+        private ulong EarliestQueueFullLine()
+        {
+            ulong earliest = ulong.MaxValue;
+            foreach (var run in m_QueueFullDrops.Values)
+                if (run.LineDueOn < earliest) earliest = run.LineDueOn;
+            return earliest;
+        }
+
+        /// <summary>
+        /// "Event queue full (64 events) for script &lt;item&gt;: dropped 136 DATASERVER, 1 TOUCH_START events", then the
+        /// counts start again. Nothing is written when nothing was dropped since the line before.
+        /// </summary>
+        private void WriteQueueFullLine(UUID itemId, List<KeyValuePair<SupportedEventList.Events, int>> counts)
+        {
+            if (counts.Count == 0) return;
+            int total = 0;
+            foreach (var c in counts) total += c.Value;
+            m_log.LogWarning("[PhloxExe]: Event queue full ({0} events) for script {1}: dropped {2} event{3}",
+                MAX_EVENT_QUEUE_DEPTH, itemId, string.Join(", ", counts.ConvertAll(c => c.Value + " " + c.Key)), total == 1 ? "" : "s");
+            counts.Clear();
         }
 
         /// <summary>The kinds RuntimeState.QueueEvent keeps past the queue limit (its OVERFLOWABLE_EVENTS).</summary>
@@ -1806,6 +1928,7 @@ namespace Phlox.ScriptEngine
         }
         private readonly Queue<ObjectStateRequest> m_ObjectStateRequests = new();
         private readonly Queue<UUID> m_ArrivedAvatars = new();
+        private readonly Queue<UUID> m_ExperienceLandChecks = new();
 
         // Captures taken for an object's other scripts, by item id, until the core asks for them (it asks one script at a
         // time, SceneObjectPartInventory.GetScriptStates). A null blob: the script travels without state.
@@ -1966,10 +2089,42 @@ namespace Phlox.ScriptEngine
             }
         }
 
+        /// <summary>
+        /// An avatar entered a parcel here. Every script holding a grant this avatar gave from an Experience asks whether the
+        /// Experience can still run for it (<see cref="LSLSystemAPI.ExperienceLandChanged"/>).
+        /// </summary>
+        internal void RequestExperienceLandCheck(UUID agentId)
+        {
+            lock (m_ExperienceLandChecks) m_ExperienceLandChecks.Enqueue(agentId);
+            m_WorkArrived?.Invoke();
+        }
+
+        private void ProcessExperienceLandChecks()
+        {
+            List<UUID> batch;
+            lock (m_ExperienceLandChecks)
+            {
+                if (m_ExperienceLandChecks.Count == 0) return;
+                batch = new List<UUID>(m_ExperienceLandChecks);
+                m_ExperienceLandChecks.Clear();
+            }
+            foreach (UUID agentId in batch)
+            {
+                var holders = new List<LSLSystemAPI>();
+                foreach (KeyValuePair<UUID, LSLSystemAPI> kv in m_Apis)
+                    if (kv.Value.HoldsExperienceGrantFrom(agentId)) holders.Add(kv.Value);
+                foreach (LSLSystemAPI api in holders) api.ExperienceLandChanged(agentId);
+            }
+        }
+
         // ── Permission lifecycle ───────────────────────────────────────────────
 
         /// <summary>The core released this script's controls on an avatar still in the region (stand, Release Keys, detach, drop).</summary>
         internal void RequestControlsReleasedByCore(UUID itemId, UUID agentId) => EnqueuePermsEnd(new PermsEndReq { ItemId = itemId, AgentId = agentId });
+
+        /// <summary>The core ended the grant an avatar gave a script through an Experience (the avatar blocked it).</summary>
+        internal void RequestExperienceGrantEnded(UUID itemId, UUID agentId, UUID experience)
+            => EnqueuePermsEnd(new PermsEndReq { ItemId = itemId, AgentId = agentId, ExperienceEnded = true, Experience = experience });
 
         /// <summary>The object has a new owner.</summary>
         internal void RequestOwnerChanged(SceneObjectGroup group)
@@ -1996,7 +2151,9 @@ namespace Phlox.ScriptEngine
             {
                 if (req.Group == null)
                 {
-                    if (m_Apis.TryGetValue(req.ItemId, out LSLSystemAPI api)) api.ControlsReleasedByCore(req.AgentId);
+                    if (!m_Apis.TryGetValue(req.ItemId, out LSLSystemAPI api)) continue;
+                    if (req.ExperienceEnded) api.ExperienceGrantEndedByCore(req.AgentId, req.Experience);
+                    else api.ControlsReleasedByCore(req.AgentId);
                     continue;
                 }
                 if (req.Group.IsDeleted) continue;
