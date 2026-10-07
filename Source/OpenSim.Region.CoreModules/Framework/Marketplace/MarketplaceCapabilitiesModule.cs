@@ -86,7 +86,7 @@ public sealed class MarketplaceCapabilitiesModule : INonSharedRegionModule
 
     private void OnRegisterCaps(UUID agentId, OpenSimCaps caps)
     {
-        var path = caps.CapsObjectPath + "/DirectDelivery";
+        var path = "/" + caps.CapsObjectPath.Trim('/') + "/DirectDelivery";
         var handler = new SimpleStreamHandler(path, (request, response) =>
             HandleMarketplaceRequest(agentId, request, response));
 
